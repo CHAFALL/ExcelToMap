@@ -527,6 +527,7 @@
         display: none;
       }
 
+      /* 이름 2·3 은 세로로 쌓지 않고 둘째 줄에 나란히 놓는다 */
       .marker-label .sub-label {
         font-size: var(--label-2);
         color: #444;
@@ -535,6 +536,12 @@
       .marker-label .sub-label-2 {
         font-size: var(--label-3);
         color: #555;
+      }
+
+      .marker-label .sub-sep {
+        margin: 0 4px;
+        font-size: var(--label-2);
+        color: #999;
       }
 
       /* ---------- 모바일 ---------- */
@@ -790,6 +797,7 @@
         const CACHE_LIMIT = 5000; // localStorage 에 보관할 최대 주소 수
         const MAX_FIT_ZOOM = 17; // 결과가 1~2개일 때 과도한 확대 방지
         const MARKER_HTML = '<div class="map-marker"><i></i></div>';
+        const LABEL_SEPARATOR = "·"; // 라벨 둘째 줄에서 이름 2 와 3 을 가르는 문자
 
         /* =======================================================
            DOM 참조 (한 번만 조회)
@@ -1429,10 +1437,16 @@
 
           // 라벨 내용은 생성 시 한 번만 만든다. 크기·표시 여부는 CSS 가 담당.
           let labelOverlay = null;
-          let labelHtml = "";
-          if (name1) labelHtml += esc(name1);
-          if (name2) labelHtml += `<br><span class="sub-label">${esc(name2)}</span>`;
-          if (name3) labelHtml += `<br><span class="sub-label-2">${esc(name3)}</span>`;
+          let labelHtml = name1 ? esc(name1) : "";
+
+          // 이름 2·3 은 한 줄에 나란히 (둘 중 하나만 있으면 구분자 없이)
+          const subs = [];
+          if (name2) subs.push(`<span class="sub-label">${esc(name2)}</span>`);
+          if (name3) subs.push(`<span class="sub-label-2">${esc(name3)}</span>`);
+          if (subs.length) {
+            const subLine = subs.join(`<span class="sub-sep">${LABEL_SEPARATOR}</span>`);
+            labelHtml += labelHtml ? "<br>" + subLine : subLine;
+          }
 
           if (labelHtml) {
             labelOverlay = new naver.maps.Marker({
