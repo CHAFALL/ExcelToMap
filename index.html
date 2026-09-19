@@ -11,6 +11,12 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
+      :root {
+        --naver-green: #03c75a;
+        --naver-green-dark: #02b350;
+        --card-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+
       * {
         margin: 0;
         padding: 0;
@@ -23,35 +29,40 @@
         background: #f5f5f5;
       }
 
+      body.no-scroll {
+        overflow: hidden;
+      }
+
       .container {
         max-width: 1400px;
         margin: 0 auto;
         padding: 20px;
       }
 
-      .header {
+      .header,
+      .upload-section,
+      .map-container {
         background: white;
-        padding: 30px;
         border-radius: 8px;
+        box-shadow: var(--card-shadow);
+      }
+
+      .header {
+        padding: 30px;
         margin-bottom: 20px;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
       }
 
       h1 {
-        color: #03c75a;
+        color: var(--naver-green);
         margin-bottom: 10px;
       }
 
       .upload-section {
-        background: white;
         padding: 30px;
-        border-radius: 8px;
         margin-bottom: 20px;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
       }
 
       .file-input-wrapper {
-        position: relative;
         display: inline-block;
         margin-bottom: 20px;
       }
@@ -63,7 +74,7 @@
       .file-label {
         display: inline-block;
         padding: 12px 24px;
-        background: #03c75a;
+        background: var(--naver-green);
         color: white;
         border-radius: 4px;
         cursor: pointer;
@@ -72,7 +83,7 @@
       }
 
       .file-label:hover {
-        background: #02b350;
+        background: var(--naver-green-dark);
       }
 
       .file-name {
@@ -96,6 +107,10 @@
         margin-bottom: 15px;
       }
 
+      .is-hidden {
+        display: none;
+      }
+
       .select-group label {
         display: block;
         margin-bottom: 5px;
@@ -115,7 +130,7 @@
       .btn-show-map {
         display: none;
         padding: 12px 32px;
-        background: #03c75a;
+        background: var(--naver-green);
         color: white;
         border: none;
         border-radius: 4px;
@@ -129,16 +144,27 @@
         display: inline-block;
       }
 
-      .btn-show-map:hover {
-        background: #02b350;
+      .btn-show-map:hover:not(:disabled) {
+        background: var(--naver-green-dark);
+      }
+
+      .btn-show-map:disabled {
+        background: #b5b5b5;
+        cursor: progress;
       }
 
       .map-container {
-        background: white;
         padding: 20px;
-        border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         position: relative;
+      }
+
+      /* 마커/라벨 크기는 여기 정의된 CSS 변수로만 제어한다.
+         슬라이더는 변수 값만 바꾸므로 마커 DOM을 다시 만들 필요가 없다. */
+      #mapContainer {
+        --marker-size: 13px;
+        --label-1: 13px;
+        --label-2: 13px;
+        --label-3: 13px;
       }
 
       #map {
@@ -194,7 +220,7 @@
 
       .btn-fullscreen {
         padding: 10px 20px;
-        background: #03c75a;
+        background: var(--naver-green);
         color: white;
         border: none;
         border-radius: 4px;
@@ -204,7 +230,7 @@
       }
 
       .btn-fullscreen:hover {
-        background: #02b350;
+        background: var(--naver-green-dark);
       }
 
       .btn-collapse {
@@ -234,19 +260,22 @@
         padding: 15px 30px;
       }
 
-      /* 지도 타입 플로팅 메뉴 */
-      .map-type-floating {
+      /* ---------- 지도 위 플로팅 컨트롤 (지도 타입 / 표시 설정 공용) ---------- */
+      .map-float-group {
         position: absolute;
         top: 12px;
         left: 12px;
         z-index: 10;
         display: flex;
-        flex-direction: row;
-        align-items: flex-start;
         gap: 6px;
+        align-items: flex-start;
       }
 
-      .map-type-toggle {
+      .map-float-anchor {
+        position: relative;
+      }
+
+      .float-toggle {
         width: 40px;
         height: 40px;
         background: rgba(255, 255, 255, 0.95);
@@ -262,30 +291,39 @@
         transition: all 0.2s;
       }
 
-      .map-type-toggle:hover {
+      .float-toggle:hover {
         background: #fff;
         box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
       }
 
-      .map-type-menu {
+      .float-menu {
         position: absolute;
         top: 46px;
         left: 0;
-        background: rgba(255, 255, 255, 0.95);
+        background: rgba(255, 255, 255, 0.96);
         border-radius: 8px;
         box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
         backdrop-filter: blur(4px);
-        overflow: hidden;
         opacity: 0;
         visibility: hidden;
         transform: translateY(-6px);
         transition: all 0.2s ease;
       }
 
-      .map-type-menu.open {
+      .float-menu.open {
         opacity: 1;
         visibility: visible;
         transform: translateY(0);
+      }
+
+      .map-type-menu {
+        overflow: hidden;
+      }
+
+      .custom-controls-menu {
+        border-radius: 10px;
+        padding: 14px 16px;
+        min-width: 220px;
       }
 
       .map-type-btn {
@@ -315,7 +353,7 @@
       }
 
       .map-type-btn.active {
-        color: #03c75a;
+        color: var(--naver-green);
         font-weight: 700;
       }
 
@@ -323,126 +361,6 @@
         width: 16px;
         text-align: center;
         font-size: 12px;
-      }
-
-      /* 전체화면 스타일 */
-      .map-container.fullscreen {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100vw;
-        height: 100vh;
-        z-index: 9999;
-        margin: 0;
-        padding: 0;
-        border-radius: 0;
-      }
-
-      .map-container.fullscreen #map {
-        height: 100vh;
-        border-radius: 0;
-      }
-
-      .map-container.fullscreen .map-controls {
-        position: absolute;
-        top: 12px;
-        right: 12px;
-        z-index: 10;
-        margin: 0;
-      }
-
-      .map-container.fullscreen .map-controls .map-title {
-        display: none;
-      }
-
-      .map-container.fullscreen .btn-fullscreen {
-        padding: 8px 14px;
-        background: rgba(255, 255, 255, 0.92);
-        color: #333;
-        border: none;
-        border-radius: 6px;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-        font-size: 13px;
-        font-weight: 600;
-        backdrop-filter: blur(4px);
-      }
-
-      .map-container.fullscreen .btn-fullscreen:hover {
-        background: rgba(255, 255, 255, 1);
-      }
-
-      /* 마커 라벨 스타일 */
-      .marker-label {
-        position: absolute;
-        padding: 2px 4px;
-        background: none;
-        font-size: 13px;
-        font-weight: 700;
-        color: #333;
-        white-space: nowrap;
-        text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff,
-          1px 1px 0 #fff, 0px 0px 3px #fff;
-        pointer-events: none;
-        transform: translate(-50%, -100%);
-        margin-top: -2px;
-        text-align: center;
-        line-height: 1.3;
-      }
-
-      .marker-label .sub-label {
-        font-size: 13px;
-        font-weight: 700;
-        color: #444;
-      }
-
-      .marker-label .sub-label-2 {
-        font-size: 13px;
-        font-weight: 700;
-        color: #555;
-      }
-
-      /* 커스텀 컨트롤 패널 */
-      .custom-controls-toggle {
-        width: 40px;
-        height: 40px;
-        background: rgba(255, 255, 255, 0.95);
-        border: none;
-        border-radius: 8px;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-        cursor: pointer;
-        font-size: 18px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        backdrop-filter: blur(4px);
-        transition: all 0.2s;
-      }
-
-      .custom-controls-toggle:hover {
-        background: #fff;
-        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
-      }
-
-      .custom-controls-menu {
-        position: absolute;
-        top: 46px;
-        left: 0;
-        background: rgba(255, 255, 255, 0.97);
-        border-radius: 10px;
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
-        backdrop-filter: blur(4px);
-        padding: 14px 16px;
-        min-width: 220px;
-        opacity: 0;
-        visibility: hidden;
-        transform: translateY(-6px);
-        transition: all 0.2s ease;
-      }
-
-      .custom-controls-menu.open {
-        opacity: 1;
-        visibility: visible;
-        transform: translateY(0);
       }
 
       .custom-controls-menu h4 {
@@ -478,7 +396,7 @@
       .slider-value-badge {
         font-size: 12px;
         font-weight: 700;
-        color: #03c75a;
+        color: var(--naver-green);
         background: #e8f8f0;
         padding: 2px 8px;
         border-radius: 10px;
@@ -488,6 +406,7 @@
 
       input[type="range"] {
         -webkit-appearance: none;
+        appearance: none;
         width: 100%;
         height: 4px;
         border-radius: 2px;
@@ -498,17 +417,23 @@
 
       input[type="range"]::-webkit-slider-thumb {
         -webkit-appearance: none;
+        appearance: none;
         width: 16px;
         height: 16px;
         border-radius: 50%;
-        background: #03c75a;
+        background: var(--naver-green);
         cursor: pointer;
-        box-shadow: 0 1px 4px rgba(0,0,0,0.2);
-        transition: background 0.2s;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
       }
 
-      input[type="range"]::-webkit-slider-thumb:hover {
-        background: #02b350;
+      input[type="range"]::-moz-range-thumb {
+        width: 16px;
+        height: 16px;
+        border: none;
+        border-radius: 50%;
+        background: var(--naver-green);
+        cursor: pointer;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
       }
 
       .slider-divider {
@@ -517,14 +442,102 @@
         margin: 12px 0;
       }
 
-      .map-container.fullscreen .map-type-floating {
+      /* ---------- 전체화면 ---------- */
+      .map-container.fullscreen {
         position: fixed;
-        top: 12px;
-        left: 12px;
-        z-index: 10001;
+        inset: 0;
+        width: 100vw;
+        height: 100vh;
+        z-index: 9999;
+        margin: 0;
+        padding: 0;
+        border-radius: 0;
       }
 
-      /* 모바일 반응형 */
+      .map-container.fullscreen #map {
+        height: 100vh;
+        border-radius: 0;
+      }
+
+      .map-container.fullscreen .map-controls {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        z-index: 10;
+        margin: 0;
+      }
+
+      .map-container.fullscreen .map-title {
+        display: none;
+      }
+
+      .map-container.fullscreen .btn-fullscreen {
+        padding: 8px 14px;
+        background: rgba(255, 255, 255, 0.92);
+        color: #333;
+        border-radius: 6px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+        font-size: 13px;
+        font-weight: 600;
+        backdrop-filter: blur(4px);
+      }
+
+      .map-container.fullscreen .btn-fullscreen:hover {
+        background: #fff;
+      }
+
+      /* ---------- 마커 / 라벨 ---------- */
+      /* 클릭 영역은 항상 고정 크기라서 앵커를 다시 계산할 필요가 없고,
+         보이는 점의 크기만 --marker-size 로 바뀐다. */
+      .map-marker {
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .map-marker i {
+        width: var(--marker-size);
+        height: var(--marker-size);
+        background: #ff0000;
+        border: 2px solid #fff;
+        border-radius: 50%;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+      }
+
+      .marker-label {
+        position: absolute;
+        padding: 2px 4px;
+        font-size: var(--label-1);
+        font-weight: 700;
+        color: #333;
+        white-space: nowrap;
+        text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff,
+          1px 1px 0 #fff, 0 0 3px #fff;
+        pointer-events: none;
+        transform: translate(-50%, -100%);
+        margin-top: calc(var(--marker-size) / -2 - 4px);
+        text-align: center;
+        line-height: 1.3;
+      }
+
+      /* 줌 임계값 아래에서는 클래스 하나로 전부 숨긴다 (마커 재생성 없음) */
+      #mapContainer:not(.labels-on) .marker-label {
+        display: none;
+      }
+
+      .marker-label .sub-label {
+        font-size: var(--label-2);
+        color: #444;
+      }
+
+      .marker-label .sub-label-2 {
+        font-size: var(--label-3);
+        color: #555;
+      }
+
+      /* ---------- 모바일 ---------- */
       @media (max-width: 768px) {
         .container {
           padding: 10px;
@@ -579,7 +592,7 @@
           align-items: stretch;
         }
 
-        .map-controls h3 {
+        .map-title {
           text-align: center;
         }
 
@@ -588,9 +601,6 @@
         }
 
         .map-container.fullscreen .map-controls {
-          position: absolute;
-          top: 12px;
-          right: 12px;
           flex-direction: row;
           align-items: center;
         }
@@ -622,22 +632,32 @@
         <p>엑셀 파일의 주소를 네이버 지도에 표시해보세요</p>
       </div>
 
-      <div class="upload-section">
+      <div class="upload-section" id="uploadSection">
         <div class="instruction">
           <p><strong>사용 방법:</strong></p>
           <p>1. 엑셀(.xlsx) 또는 CSV 파일을 업로드하세요</p>
-          <p>2. 주소가 있는 열을 선택하세요</p>
-          <p>3. 지도에 표시 버튼을 클릭하세요</p>
-          <p>4. 지도를 확대하면 마커 옆에 이름이 표시됩니다</p>
+          <p>2. 시트가 여러 개면 원하는 시트를 고르세요</p>
+          <p>3. 주소가 있는 열을 선택하세요</p>
+          <p>4. 지도에 표시 버튼을 클릭하세요</p>
+          <p>5. 지도를 확대하면 마커 옆에 이름이 표시됩니다</p>
         </div>
 
         <div class="file-input-wrapper">
-          <input type="file" id="fileInput" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv" />
+          <input
+            type="file"
+            id="fileInput"
+            accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
+          />
           <label for="fileInput" class="file-label">📁 파일 선택</label>
           <span class="file-name" id="fileName">선택된 파일 없음</span>
         </div>
 
         <div id="columnSelection" class="column-selection">
+          <div class="select-group is-hidden" id="sheetGroup">
+            <label for="sheetSelect">시트 선택:</label>
+            <select id="sheetSelect"></select>
+          </div>
+
           <div class="select-group">
             <label for="addressColumn">주소 열 선택 (필수):</label>
             <select id="addressColumn">
@@ -669,7 +689,7 @@
           <button id="showMapBtn" class="btn-show-map">🗺️ 지도에 표시</button>
         </div>
 
-        <div id="status" class="status"></div>
+        <div id="status" class="status" role="status" aria-live="polite"></div>
 
         <button id="collapseBtn" class="btn-collapse">▲ 접기</button>
       </div>
@@ -680,16 +700,14 @@
           <button id="fullscreenBtn" class="btn-fullscreen">🔍 전체화면</button>
         </div>
 
-        <!-- 지도 영역 -->
-        <div style="position: relative;">
-
-          <!-- 좌측 상단: 지도 타입 + 설정 버튼 묶음 -->
-          <div class="map-type-floating">
-
-            <!-- 🗺️ 지도 타입 토글 -->
-            <div style="position: relative;">
-              <button class="map-type-toggle" id="mapTypeToggle" title="지도 유형">🗺️</button>
-              <div class="map-type-menu" id="mapTypeMenu">
+        <div style="position: relative">
+          <div class="map-float-group">
+            <!-- 지도 타입 -->
+            <div class="map-float-anchor">
+              <button class="float-toggle" id="mapTypeToggle" title="지도 유형">
+                🗺️
+              </button>
+              <div class="float-menu map-type-menu" id="mapTypeMenu">
                 <button class="map-type-btn active" data-type="NORMAL">
                   <span class="check-icon">✓</span> 일반지도
                 </button>
@@ -705,44 +723,52 @@
               </div>
             </div>
 
-            <!-- ⚙️ 마커/라벨 크기 설정 -->
-            <div style="position: relative;">
-              <button class="custom-controls-toggle" id="customControlsToggle" title="마커/라벨 크기 조절">⚙️</button>
-              <div class="custom-controls-menu" id="customControlsMenu">
+            <!-- 마커/라벨 크기 -->
+            <div class="map-float-anchor">
+              <button
+                class="float-toggle"
+                id="customControlsToggle"
+                title="마커/라벨 크기 조절"
+              >
+                ⚙️
+              </button>
+              <div
+                class="float-menu custom-controls-menu"
+                id="customControlsMenu"
+              >
                 <h4>🎨 표시 설정</h4>
                 <div class="slider-group">
                   <div class="slider-label-row">
                     <span>마커 크기</span>
-                    <span class="slider-value-badge" id="markerSizeVal">17px</span>
+                    <span class="slider-value-badge" id="markerSizeVal">13px</span>
                   </div>
-                  <input type="range" id="markerSizeSlider" min="6" max="40" value="17" step="1">
+                  <input type="range" id="markerSizeSlider" min="6" max="36" value="13" step="1" />
                 </div>
-                <hr class="slider-divider">
+                <hr class="slider-divider" />
                 <div class="slider-group">
                   <div class="slider-label-row">
                     <span>라벨 크기 (이름 1)</span>
                     <span class="slider-value-badge" id="labelSizeVal">13px</span>
                   </div>
-                  <input type="range" id="labelSizeSlider" min="8" max="28" value="13" step="1">
+                  <input type="range" id="labelSizeSlider" min="8" max="28" value="13" step="1" />
                 </div>
                 <div class="slider-group">
                   <div class="slider-label-row">
                     <span>라벨 크기 (이름 2)</span>
                     <span class="slider-value-badge" id="subLabelSizeVal">13px</span>
                   </div>
-                  <input type="range" id="subLabelSizeSlider" min="8" max="28" value="13" step="1">
+                  <input type="range" id="subLabelSizeSlider" min="8" max="28" value="13" step="1" />
                 </div>
                 <div class="slider-group">
                   <div class="slider-label-row">
                     <span>라벨 크기 (이름 3)</span>
                     <span class="slider-value-badge" id="subLabelSize2Val">13px</span>
                   </div>
-                  <input type="range" id="subLabelSize2Slider" min="8" max="28" value="13" step="1">
+                  <input type="range" id="subLabelSize2Slider" min="8" max="28" value="13" step="1" />
                 </div>
               </div>
             </div>
-
-          </div><!-- /.map-type-floating -->
+          </div>
 
           <div id="map"></div>
         </div>
@@ -750,536 +776,742 @@
     </div>
 
     <script>
-      let fileData = null;
-      let map = null;
-      let markers = [];
-      const LABEL_ZOOM_THRESHOLD = 16;
+      (function () {
+        "use strict";
 
-      // 커스텀 크기 변수
-      let markerSize = 17;
-      let labelFontSize = 13;
-      let subLabelFontSize = 13;
-      let subLabelFontSize2 = 13;
+        /* =======================================================
+           상수
+           ======================================================= */
+        const LABEL_ZOOM_THRESHOLD = 16; // 이 줌 이상에서만 라벨 표시
+        const MARKER_ANCHOR = 18; // .map-marker 박스(36px)의 절반
+        const GEOCODE_CONCURRENCY = 6; // 동시 지오코딩 요청 수
+        const PLACE_CHUNK = 200; // 캐시 히트 마커를 한 번에 그릴 개수
+        const CACHE_KEY = "geoCache.v1";
+        const CACHE_LIMIT = 5000; // localStorage 에 보관할 최대 주소 수
+        const MAX_FIT_ZOOM = 17; // 결과가 1~2개일 때 과도한 확대 방지
+        const MARKER_HTML = '<div class="map-marker"><i></i></div>';
 
-      // ✅ 주소 전처리 함수
-      function cleanAddress(address) {
-        if (!address) return address;
-        let addr = String(address).trim();
+        /* =======================================================
+           DOM 참조 (한 번만 조회)
+           ======================================================= */
+        const $ = (id) => document.getElementById(id);
+        const el = {
+          fileInput: $("fileInput"),
+          fileName: $("fileName"),
+          columnSelection: $("columnSelection"),
+          sheetGroup: $("sheetGroup"),
+          sheetSelect: $("sheetSelect"),
+          addressColumn: $("addressColumn"),
+          nameColumn: $("nameColumn"),
+          nameColumn2: $("nameColumn2"),
+          nameColumn3: $("nameColumn3"),
+          showMapBtn: $("showMapBtn"),
+          status: $("status"),
+          collapseBtn: $("collapseBtn"),
+          uploadSection: $("uploadSection"),
+          fullscreenBtn: $("fullscreenBtn"),
+          mapContainer: $("mapContainer"),
+        };
 
-        // 1. 괄호 안 내용 제거 (중첩 포함, 반복 적용)
-        for (let i = 0; i < 3; i++) {
-          addr = addr.replace(/\([^)]*\)/g, '');
+        /* =======================================================
+           상태
+           ======================================================= */
+        let fileRows = null; // 현재 선택된 시트의 행 배열
+        let workbook = null; // 엑셀 통합문서 (시트 전환용, CSV 는 null)
+        let lastSelection = { address: "", name1: "", name2: "", name3: "" };
+        let map = null;
+        let infoWindow = null;
+        let activeMarker = null;
+        let markers = []; // { marker, labelOverlay }
+        let runToken = 0; // 실행 중 재실행 시 이전 작업 무효화
+
+        /* =======================================================
+           유틸
+           ======================================================= */
+        const ESCAPES = {
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#39;",
+        };
+
+        // 엑셀 셀 값이 그대로 HTML 로 들어가지 않도록 이스케이프
+        function esc(value) {
+          if (value === null || value === undefined) return "";
+          return String(value).replace(/[&<>"']/g, (c) => ESCAPES[c]);
         }
 
-        // 2. 쉼표 이후 제거
-        addr = addr.replace(/,.*$/, '');
+        function showStatus(message, type) {
+          el.status.textContent = message;
+          el.status.className = "status " + type;
+        }
 
-        // 3. 슬래시 이후 제거
-        addr = addr.replace(/\/.*$/, '');
+        // 주소 전처리: 괄호/쉼표 뒤/슬래시 뒤/"번지" 제거
+        function cleanAddress(address) {
+          if (address === null || address === undefined) return "";
+          let addr = String(address).trim();
 
-        // 4. "번지" 제거
-        addr = addr.replace(/번지/g, '');
+          let prev;
+          do {
+            prev = addr;
+            addr = addr.replace(/\([^()]*\)/g, ""); // 중첩 괄호까지 반복 제거
+          } while (addr !== prev);
 
-        // 5. 연속 공백 정리
-        addr = addr.replace(/\s+/g, ' ').trim();
+          addr = addr.replace(/,.*$/, "");
+          addr = addr.replace(/\/.*$/, "");
+          addr = addr.replace(/(\d)\s*번지/g, "$1"); // 숫자 뒤 "번지"만 제거
+          return addr.replace(/\s+/g, " ").trim();
+        }
 
-        return addr;
-      }
+        /* =======================================================
+           지오코딩 캐시
+           메모리에서 읽고 쓰며, localStorage 에는 지연 저장한다.
+           (예전에는 주소 하나마다 전체 캐시를 직렬화해 O(n²) 였다)
+           ======================================================= */
+        const geoCache = (function loadCache() {
+          try {
+            const raw = localStorage.getItem(CACHE_KEY);
+            return raw ? JSON.parse(raw) : {};
+          } catch (e) {
+            return {};
+          }
+        })();
 
-      // 커스텀 컨트롤 패널 토글
-      const customControlsToggle = document.getElementById("customControlsToggle");
-      const customControlsMenu = document.getElementById("customControlsMenu");
+        let cacheDirty = false;
+        let cacheFlushTimer = null;
 
-      customControlsToggle.addEventListener("click", function (e) {
-        e.stopPropagation();
-        customControlsMenu.classList.toggle("open");
-      });
+        function cacheSet(address, coords) {
+          geoCache[address] = coords;
+          cacheDirty = true;
+          if (cacheFlushTimer === null) {
+            cacheFlushTimer = setTimeout(flushCache, 2000);
+          }
+        }
 
-      document.addEventListener("click", function () {
-        customControlsMenu.classList.remove("open");
-      });
+        function flushCache() {
+          cacheFlushTimer = null;
+          if (!cacheDirty) return;
+          cacheDirty = false;
 
-      customControlsMenu.addEventListener("click", function (e) {
-        e.stopPropagation();
-      });
+          let keys = Object.keys(geoCache);
+          if (keys.length > CACHE_LIMIT) {
+            // 오래된 항목부터 버려 용량 초과를 예방
+            keys.slice(0, keys.length - CACHE_LIMIT).forEach((k) => {
+              delete geoCache[k];
+            });
+            keys = Object.keys(geoCache);
+          }
 
-      // 마커 크기 슬라이더
-      document.getElementById("markerSizeSlider").addEventListener("input", function () {
-        markerSize = parseInt(this.value);
-        document.getElementById("markerSizeVal").textContent = markerSize + "px";
-        updateAllMarkerSizes();
-      });
-
-      // 라벨 크기 슬라이더
-      document.getElementById("labelSizeSlider").addEventListener("input", function () {
-        labelFontSize = parseInt(this.value);
-        document.getElementById("labelSizeVal").textContent = labelFontSize + "px";
-        updateAllLabelSizes();
-      });
-
-      // 서브 라벨 크기 슬라이더
-      document.getElementById("subLabelSizeSlider").addEventListener("input", function () {
-        subLabelFontSize = parseInt(this.value);
-        document.getElementById("subLabelSizeVal").textContent = subLabelFontSize + "px";
-        updateAllLabelSizes();
-      });
-
-      // 서브 라벨 2 크기 슬라이더
-      document.getElementById("subLabelSize2Slider").addEventListener("input", function () {
-        subLabelFontSize2 = parseInt(this.value);
-        document.getElementById("subLabelSize2Val").textContent = subLabelFontSize2 + "px";
-        updateAllLabelSizes();
-      });
-
-      function updateAllMarkerSizes() {
-        const half = markerSize / 2;
-        markers.forEach((markerData) => {
-          markerData.marker.setIcon({
-            content: `<div style="width: ${markerSize}px; height: ${markerSize}px; background: #ff0000; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>`,
-            anchor: new naver.maps.Point(half, half),
-          });
-        });
-      }
-
-      function updateAllLabelSizes() {
-        const currentZoom = map ? map.getZoom() : 0;
-        const showLabels = currentZoom >= LABEL_ZOOM_THRESHOLD;
-        markers.forEach((markerData) => {
-          if (markerData.labelOverlay) {
-            const icon = markerData.labelOverlay.getIcon();
-            let newContent = icon.content
-              .replace(/font-size:\s*[\d.]+px(?=;[^"]*class="marker-label)/, `font-size: ${labelFontSize}px`)
-              .replace(/class="sub-label" style="font-size:\s*[\d.]+px/, `class="sub-label" style="font-size: ${subLabelFontSize}px`);
-
-            if (markerData.labelHtml !== undefined) {
-              const display = showLabels ? "block" : "none";
-              newContent = buildLabelContent(markerData.labelHtml, display);
+          try {
+            localStorage.setItem(CACHE_KEY, JSON.stringify(geoCache));
+          } catch (e) {
+            // 용량 초과: 절반을 비우고 한 번만 재시도
+            keys.slice(0, Math.floor(keys.length / 2)).forEach((k) => {
+              delete geoCache[k];
+            });
+            try {
+              localStorage.setItem(CACHE_KEY, JSON.stringify(geoCache));
+            } catch (e2) {
+              /* 저장 포기 — 메모리 캐시로만 동작 */
             }
-
-            markerData.labelOverlay.setIcon({
-              content: newContent,
-              anchor: new naver.maps.Point(0, 2),
-            });
           }
-        });
-      }
+        }
 
-      function buildLabelContent(labelHtml, display) {
-        let processedHtml = labelHtml.replace(
-          /(<span class="sub-label">)/,
-          `<span class="sub-label" style="font-size: ${subLabelFontSize}px;">`
-        );
-        processedHtml = processedHtml.replace(
-          /(<span class="sub-label-2">)/,
-          `<span class="sub-label-2" style="font-size: ${subLabelFontSize2}px;">`
-        );
-        return `<div class="marker-label" style="display: ${display}; font-size: ${labelFontSize}px;">${processedHtml}</div>`;
-      }
+        window.addEventListener("beforeunload", flushCache);
 
-      function initMap() {
-        const mapOptions = {
-          center: new naver.maps.LatLng(37.5665, 126.978),
-          zoom: 12,
-        };
-        map = new naver.maps.Map("map", mapOptions);
-
-        naver.maps.Event.addListener(map, "zoom_changed", function (zoom) {
-          updateLabelsVisibility(zoom);
-        });
-      }
-
-      function updateLabelsVisibility(zoom) {
-        const showLabels = zoom >= LABEL_ZOOM_THRESHOLD;
-        markers.forEach((markerData) => {
-          if (markerData.labelOverlay && markerData.labelHtml !== undefined) {
-            const newContent = buildLabelContent(markerData.labelHtml, showLabels ? "block" : "none");
-            markerData.labelOverlay.setIcon({
-              content: newContent,
-              anchor: new naver.maps.Point(0, 2),
-            });
-          }
-        });
-      }
-
-      // 지도 타입 플로팅 메뉴
-      const mapTypeToggle = document.getElementById("mapTypeToggle");
-      const mapTypeMenu = document.getElementById("mapTypeMenu");
-
-      mapTypeToggle.addEventListener("click", function (e) {
-        e.stopPropagation();
-        mapTypeMenu.classList.toggle("open");
-      });
-
-      document.addEventListener("click", function () {
-        mapTypeMenu.classList.remove("open");
-      });
-
-      mapTypeMenu.addEventListener("click", function (e) {
-        e.stopPropagation();
-      });
-
-      document.querySelectorAll(".map-type-btn").forEach((btn) => {
-        btn.addEventListener("click", function () {
-          document.querySelectorAll(".map-type-btn").forEach((b) => {
-            b.classList.remove("active");
-            b.querySelector(".check-icon").textContent = "";
+        /* =======================================================
+           지도 초기화
+           ======================================================= */
+        function initMap() {
+          map = new naver.maps.Map("map", {
+            center: new naver.maps.LatLng(37.5665, 126.978),
+            zoom: 12,
           });
-          this.classList.add("active");
-          this.querySelector(".check-icon").textContent = "✓";
-          map.setMapTypeId(naver.maps.MapTypeId[this.dataset.type]);
-          mapTypeMenu.classList.remove("open");
-        });
-      });
 
-      document.getElementById("fileInput").addEventListener("change", function (e) {
+          infoWindow = new naver.maps.InfoWindow({ content: "" });
+
+          syncLabelVisibility(map.getZoom());
+          naver.maps.Event.addListener(map, "zoom_changed", syncLabelVisibility);
+        }
+
+        // 라벨 표시/숨김은 컨테이너 클래스 하나로 처리한다.
+        function syncLabelVisibility(zoom) {
+          el.mapContainer.classList.toggle(
+            "labels-on",
+            zoom >= LABEL_ZOOM_THRESHOLD
+          );
+        }
+
+        /* =======================================================
+           플로팅 메뉴 (지도 타입 / 표시 설정)
+           ======================================================= */
+        const openableMenus = [];
+
+        function registerMenu(toggleId, menuId) {
+          const toggle = $(toggleId);
+          const menu = $(menuId);
+          openableMenus.push(menu);
+
+          toggle.addEventListener("click", function (e) {
+            e.stopPropagation();
+            const willOpen = !menu.classList.contains("open");
+            closeAllMenus();
+            menu.classList.toggle("open", willOpen);
+          });
+
+          menu.addEventListener("click", (e) => e.stopPropagation());
+        }
+
+        function closeAllMenus() {
+          openableMenus.forEach((m) => m.classList.remove("open"));
+        }
+
+        registerMenu("mapTypeToggle", "mapTypeMenu");
+        registerMenu("customControlsToggle", "customControlsMenu");
+        document.addEventListener("click", closeAllMenus);
+
+        const mapTypeButtons = document.querySelectorAll(".map-type-btn");
+        mapTypeButtons.forEach((btn) => {
+          btn.addEventListener("click", function () {
+            if (!map) return;
+            mapTypeButtons.forEach((b) => {
+              b.classList.remove("active");
+              b.querySelector(".check-icon").textContent = "";
+            });
+            this.classList.add("active");
+            this.querySelector(".check-icon").textContent = "✓";
+            map.setMapTypeId(naver.maps.MapTypeId[this.dataset.type]);
+            closeAllMenus();
+          });
+        });
+
+        /* =======================================================
+           크기 슬라이더 → CSS 변수만 변경 (마커 DOM 재생성 없음)
+           ======================================================= */
+        [
+          ["markerSizeSlider", "markerSizeVal", "--marker-size"],
+          ["labelSizeSlider", "labelSizeVal", "--label-1"],
+          ["subLabelSizeSlider", "subLabelSizeVal", "--label-2"],
+          ["subLabelSize2Slider", "subLabelSize2Val", "--label-3"],
+        ].forEach(function (entry) {
+          const slider = $(entry[0]);
+          const badge = $(entry[1]);
+          const cssVar = entry[2];
+          slider.addEventListener("input", function () {
+            const px = this.value + "px";
+            badge.textContent = px;
+            el.mapContainer.style.setProperty(cssVar, px);
+          });
+        });
+
+        /* =======================================================
+           파일 읽기
+           ======================================================= */
+        el.fileInput.addEventListener("change", function (e) {
           const file = e.target.files[0];
           if (!file) return;
 
-          document.getElementById("fileName").textContent = file.name;
+          el.fileName.textContent = file.name;
+          lastSelection = { address: "", name1: "", name2: "", name3: "" };
           showStatus("파일을 읽는 중...", "info");
 
+          const isCsv =
+            /\.csv$/i.test(file.name) || file.type === "text/csv";
           const reader = new FileReader();
 
-          if (file.name.endsWith(".csv")) {
-            reader.onload = function (e) {
-              Papa.parse(e.target.result, {
-                header: true,
-                complete: function (results) {
-                  processData(results.data, Object.keys(results.data[0]));
-                },
-              });
-            };
+          reader.onerror = function () {
+            showStatus("파일을 읽지 못했습니다. 다시 시도해주세요.", "error");
+          };
+
+          reader.onload = function (ev) {
+            try {
+              if (isCsv) {
+                readCsv(ev.target.result);
+              } else {
+                readWorkbook(ev.target.result);
+              }
+            } catch (err) {
+              console.error(err);
+              showStatus(
+                "파일을 해석하지 못했습니다. 형식을 확인해주세요.",
+                "error"
+              );
+            }
+          };
+
+          if (isCsv) {
             reader.readAsText(file);
           } else {
-            reader.onload = function (e) {
-              const data = new Uint8Array(e.target.result);
-              const workbook = XLSX.read(data, { type: "array" });
-              const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-              const jsonData = XLSX.utils.sheet_to_json(firstSheet);
-
-              if (jsonData.length > 0) {
-                processData(jsonData, Object.keys(jsonData[0]));
-              } else {
-                showStatus("파일에 데이터가 없습니다.", "error");
-              }
-            };
             reader.readAsArrayBuffer(file);
           }
         });
 
-      function processData(data, columns) {
-        fileData = data;
+        function readCsv(text) {
+          workbook = null;
+          el.sheetGroup.classList.add("is-hidden");
 
-        const addressSelect = document.getElementById("addressColumn");
-        const nameSelect = document.getElementById("nameColumn");
-        const nameSelect2 = document.getElementById("nameColumn2");
-        const nameSelect3 = document.getElementById("nameColumn3");
+          const results = Papa.parse(text, {
+            header: true,
+            skipEmptyLines: "greedy",
+          });
 
-        addressSelect.innerHTML =
-          '<option value="">-- 주소가 있는 열을 선택하세요 --</option>';
-        nameSelect.innerHTML = '<option value="">-- 선택 안 함 --</option>';
-        nameSelect2.innerHTML = '<option value="">-- 선택 안 함 --</option>';
-        nameSelect3.innerHTML = '<option value="">-- 선택 안 함 --</option>';
-
-        columns.forEach((col) => {
-          const option1 = document.createElement("option");
-          option1.value = col;
-          option1.textContent = col;
-          addressSelect.appendChild(option1);
-
-          const option2 = document.createElement("option");
-          option2.value = col;
-          option2.textContent = col;
-          nameSelect.appendChild(option2);
-
-          const option3 = document.createElement("option");
-          option3.value = col;
-          option3.textContent = col;
-          nameSelect2.appendChild(option3);
-
-          const option4 = document.createElement("option");
-          option4.value = col;
-          option4.textContent = col;
-          nameSelect3.appendChild(option4);
-        });
-
-        document.getElementById("columnSelection").classList.add("active");
-        showStatus(`파일 로드 완료! ${data.length}개의 행이 있습니다.`, "success");
-      }
-
-      document.getElementById("addressColumn").addEventListener("change", function () {
-          if (this.value) {
-            document.getElementById("showMapBtn").classList.add("active");
-          } else {
-            document.getElementById("showMapBtn").classList.remove("active");
+          if (!results.data.length) {
+            el.columnSelection.classList.remove("active");
+            showStatus("파일에 데이터가 없습니다.", "error");
+            return;
           }
-        });
+          processData(results.data, collectColumns(results.data));
+        }
 
-      document.getElementById("showMapBtn").addEventListener("click", function () {
-          const addressColumn = document.getElementById("addressColumn").value;
-          const nameColumn = document.getElementById("nameColumn").value;
-          const nameColumn2 = document.getElementById("nameColumn2").value;
-          const nameColumn3 = document.getElementById("nameColumn3").value;
+        function readWorkbook(arrayBuffer) {
+          workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: "array" });
+          const names = workbook.SheetNames || [];
 
-          if (!addressColumn) {
-            showStatus("주소 열을 선택해주세요.", "error");
+          if (!names.length) {
+            workbook = null;
+            el.sheetGroup.classList.add("is-hidden");
+            el.columnSelection.classList.remove("active");
+            showStatus("시트를 찾을 수 없습니다.", "error");
             return;
           }
 
-          showAddressesOnMap(addressColumn, nameColumn, nameColumn2, nameColumn3);
-        });
+          // 시트 목록 채우기 — 행 수는 시트를 파싱하지 않고 범위에서 바로 읽는다
+          const fragment = document.createDocumentFragment();
+          names.forEach(function (name, i) {
+            const count = sheetRowCount(workbook.Sheets[name]);
+            fragment.appendChild(new Option(`${name} (${count}행)`, String(i)));
+          });
+          el.sheetSelect.innerHTML = "";
+          el.sheetSelect.appendChild(fragment);
+          el.sheetGroup.classList.toggle("is-hidden", names.length < 2);
 
-      // Geocoding 캐시 관련 함수
-      function getGeoCache() {
-        try {
-          return JSON.parse(localStorage.getItem("geoCache") || "{}");
-        } catch (e) {
-          return {};
-        }
-      }
-
-      function setGeoCache(address, coords) {
-        try {
-          const cache = getGeoCache();
-          cache[address] = coords;
-          localStorage.setItem("geoCache", JSON.stringify(cache));
-        } catch (e) {
-          // localStorage 용량 초과 시 무시
-        }
-      }
-
-      const BATCH_SIZE = 50;
-
-      function showAddressesOnMap(addressColumn, nameColumn, nameColumn2, nameColumn3) {
-        markers.forEach((markerData) => {
-          markerData.marker.setMap(null);
-          if (markerData.labelOverlay) {
-            markerData.labelOverlay.setMap(null);
-          }
-        });
-        markers = [];
-
-        showStatus("주소를 지도에 표시하는 중... (0/" + fileData.length + ")", "info");
-
-        let successCount = 0;
-        let failCount = 0;
-        let cacheHitCount = 0;
-        const totalCount = fileData.length;
-        const bounds = new naver.maps.LatLngBounds();
-        const geoCache = getGeoCache();
-
-        // 배치 단위로 나누기
-        const batches = [];
-        for (let i = 0; i < fileData.length; i += BATCH_SIZE) {
-          batches.push(
-            fileData.slice(i, i + BATCH_SIZE).map((row, idx) => ({
-              row: row,
-              originalIndex: i + idx,
-            }))
+          // 앞쪽 시트가 비어 있으면(표지 시트 등) 데이터가 있는 첫 시트를 고른다
+          let index = names.findIndex(
+            (name) => sheetRowCount(workbook.Sheets[name]) > 0
           );
+          if (index < 0) index = 0;
+          el.sheetSelect.value = String(index);
+          loadSheet(index, false);
         }
 
-        function processBatch(batchIndex) {
-          if (batchIndex >= batches.length) {
-            finishMapping(successCount, failCount, cacheHitCount, bounds);
+        // 머리글 1행을 뺀 대략적인 데이터 행 수
+        function sheetRowCount(sheet) {
+          if (!sheet || !sheet["!ref"]) return 0;
+          try {
+            const range = XLSX.utils.decode_range(sheet["!ref"]);
+            return Math.max(0, range.e.r - range.s.r);
+          } catch (e) {
+            return 0;
+          }
+        }
+
+        function loadSheet(index, keepSelection) {
+          const name = workbook.SheetNames[index];
+
+          // defval 을 주면 일부 행에만 있는 열도 모든 행에 키로 존재한다
+          const rows = XLSX.utils.sheet_to_json(workbook.Sheets[name], {
+            defval: "",
+          });
+
+          if (!rows.length) {
+            fileRows = null;
+            clearColumnSelects();
+            el.columnSelection.classList.add("active"); // 시트는 계속 고를 수 있게
+            showStatus(
+              workbook.SheetNames.length > 1
+                ? `'${name}' 시트에 데이터가 없습니다. 다른 시트를 선택해보세요.`
+                : "파일에 데이터가 없습니다.",
+              "error"
+            );
             return;
           }
 
-          const batch = batches[batchIndex];
-          let batchDone = 0;
-          const batchTotal = batch.length;
+          processData(rows, collectColumns(rows), name, keepSelection);
+        }
 
-          showStatus(
-            `주소를 지도에 표시하는 중... (${Math.min((batchIndex) * BATCH_SIZE + batchTotal, totalCount)}/${totalCount}) - ${batchIndex + 1}/${batches.length} 배치`,
-            "info"
-          );
+        el.sheetSelect.addEventListener("change", function () {
+          if (!workbook) return;
+          loadSheet(parseInt(this.value, 10) || 0, true);
+        });
 
-          batch.forEach((item) => {
-            const rawAddress = item.row[addressColumn];
-
-            if (!rawAddress) {
-              failCount++;
-              batchDone++;
-              if (batchDone === batchTotal) {
-                setTimeout(() => processBatch(batchIndex + 1), 300);
-              }
-              return;
-            }
-
-            // ✅ 주소 전처리: "번지" 제거
-            const address = cleanAddress(rawAddress);
-            const addressKey = address;
-
-            // 캐시에 있으면 바로 사용
-            if (geoCache[addressKey]) {
-              const cached = geoCache[addressKey];
-              cacheHitCount++;
-              // InfoWindow에는 원본 주소 표시
-              placeMarker(cached.x, cached.y, rawAddress, address, item.row, nameColumn, nameColumn2, nameColumn3, item.originalIndex, bounds);
-              successCount++;
-              batchDone++;
-              if (batchDone === batchTotal) {
-                setTimeout(() => processBatch(batchIndex + 1), 300);
-              }
-              return;
-            }
-
-            // 캐시에 없으면 API 호출
-            naver.maps.Service.geocode({ query: address }, function (status, response) {
-              if (status === naver.maps.Service.Status.ERROR) {
-                console.error('Geocoding API 오류:', address);
-                failCount++;
-              } else if (response.v2.meta.totalCount === 0) {
-                console.warn('주소 검색 결과 없음:', address);
-                failCount++;
-              } else {
-                const result = response.v2.addresses[0];
-                setGeoCache(addressKey, { x: result.x, y: result.y });
-                // InfoWindow에는 원본 주소 표시
-                placeMarker(result.x, result.y, rawAddress, address, item.row, nameColumn, nameColumn2, nameColumn3, item.originalIndex, bounds);
-                successCount++;
-              }
-
-              batchDone++;
-              if (batchDone === batchTotal) {
-                setTimeout(() => processBatch(batchIndex + 1), 300);
+        // 첫 행에만 의존하지 않고 모든 행의 키를 순서대로 모은다
+        function collectColumns(rows) {
+          const seen = new Set();
+          const columns = [];
+          rows.forEach((row) => {
+            Object.keys(row).forEach((key) => {
+              if (!seen.has(key)) {
+                seen.add(key);
+                columns.push(key);
               }
             });
           });
+          return columns;
         }
 
-        // 첫 번째 배치부터 시작
-        processBatch(0);
-      }
+        function processData(rows, columns, sheetName, keepSelection) {
+          fileRows = rows;
 
-      // ✅ rawAddress: InfoWindow 표시용 원본 주소 / cleanedAddress: Geocoding에 사용한 전처리 주소
-      function placeMarker(x, y, rawAddress, cleanedAddress, row, nameColumn, nameColumn2, nameColumn3, index, bounds) {
-        const position = new naver.maps.LatLng(parseFloat(y), parseFloat(x));
-
-        const half = markerSize / 2;
-        const marker = new naver.maps.Marker({
-          position: position,
-          map: map,
-          icon: {
-            content: `<div style="width: ${markerSize}px; height: ${markerSize}px; background: #ff0000; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>`,
-            anchor: new naver.maps.Point(half, half),
-          },
-        });
-
-        const name = nameColumn ? row[nameColumn] : `위치 ${index + 1}`;
-        const name2 = nameColumn2 ? row[nameColumn2] : "";
-        const name3 = nameColumn3 ? row[nameColumn3] : "";
-
-        // InfoWindow에는 원본 주소(rawAddress) 표시
-        let infoContent = `<div style="padding:10px;"><strong>${name}</strong>`;
-        if (name2) {
-          infoContent += `<br><span style="color:#666;">${name2}</span>`;
-        }
-        if (name3) {
-          infoContent += `<br><span style="color:#888;">${name3}</span>`;
-        }
-        infoContent += `<br>${rawAddress}</div>`;
-
-        const infoWindow = new naver.maps.InfoWindow({
-          content: infoContent,
-        });
-
-        naver.maps.Event.addListener(marker, "click", function () {
-          if (infoWindow.getMap()) {
-            infoWindow.close();
-          } else {
-            infoWindow.open(map, marker);
+          if (!columns.length) {
+            clearColumnSelects();
+            showStatus("열 이름(머리글)을 찾을 수 없습니다.", "error");
+            return;
           }
+
+          fillSelect(el.addressColumn, "-- 주소가 있는 열을 선택하세요 --", columns);
+          [el.nameColumn, el.nameColumn2, el.nameColumn3].forEach((select) =>
+            fillSelect(select, "-- 선택 안 함 --", columns)
+          );
+
+          // 시트만 바꾼 경우, 같은 이름의 열이 있으면 선택을 되살린다.
+          // 중간에 빈 시트를 거쳐도 유지되도록 값은 lastSelection 에 따로 기억해 둔다.
+          if (keepSelection) {
+            restore(el.addressColumn, lastSelection.address, columns);
+            restore(el.nameColumn, lastSelection.name1, columns);
+            restore(el.nameColumn2, lastSelection.name2, columns);
+            restore(el.nameColumn3, lastSelection.name3, columns);
+          }
+
+          el.showMapBtn.classList.toggle("active", Boolean(el.addressColumn.value));
+          el.columnSelection.classList.add("active");
+          showStatus(
+            (sheetName ? `'${sheetName}' 시트 로드 완료! ` : "파일 로드 완료! ") +
+              `${rows.length}개의 행이 있습니다.`,
+            "success"
+          );
+        }
+
+        function fillSelect(select, placeholder, columns) {
+          const fragment = document.createDocumentFragment();
+          fragment.appendChild(new Option(placeholder, ""));
+          columns.forEach((col) => fragment.appendChild(new Option(col, col)));
+          select.innerHTML = "";
+          select.appendChild(fragment);
+        }
+
+        function restore(select, value, columns) {
+          if (value && columns.indexOf(value) !== -1) select.value = value;
+        }
+
+        function clearColumnSelects() {
+          fillSelect(el.addressColumn, "-- 주소가 있는 열을 선택하세요 --", []);
+          [el.nameColumn, el.nameColumn2, el.nameColumn3].forEach((select) =>
+            fillSelect(select, "-- 선택 안 함 --", [])
+          );
+          el.showMapBtn.classList.remove("active");
+        }
+
+        // 사용자가 고른 열 이름을 기억해 두었다가 시트를 바꿔도 되살린다
+        [
+          [el.addressColumn, "address"],
+          [el.nameColumn, "name1"],
+          [el.nameColumn2, "name2"],
+          [el.nameColumn3, "name3"],
+        ].forEach(function (entry) {
+          entry[0].addEventListener("change", function () {
+            lastSelection[entry[1]] = this.value;
+            el.showMapBtn.classList.toggle(
+              "active",
+              Boolean(el.addressColumn.value)
+            );
+          });
         });
 
-        let labelOverlay = null;
-        const hasName1 = nameColumn && row[nameColumn];
-        const hasName2 = nameColumn2 && row[nameColumn2];
-        const hasName3 = nameColumn3 && row[nameColumn3];
+        el.showMapBtn.addEventListener("click", function () {
+          if (!el.addressColumn.value) {
+            showStatus("주소 열을 선택해주세요.", "error");
+            return;
+          }
+          if (!map) {
+            showStatus("지도가 아직 준비되지 않았습니다.", "error");
+            return;
+          }
+          showAddressesOnMap({
+            address: el.addressColumn.value,
+            name1: el.nameColumn.value,
+            name2: el.nameColumn2.value,
+            name3: el.nameColumn3.value,
+          });
+        });
 
-        let labelHtml = "";
-        if (hasName1) {
-          labelHtml += row[nameColumn];
+        /* =======================================================
+           지도에 표시
+           ======================================================= */
+        function clearMarkers() {
+          markers.forEach((entry) => {
+            naver.maps.Event.clearInstanceListeners(entry.marker);
+            entry.marker.setMap(null);
+            if (entry.labelOverlay) entry.labelOverlay.setMap(null);
+          });
+          markers = [];
+          if (infoWindow) infoWindow.close();
+          activeMarker = null;
         }
-        if (hasName2) {
-          labelHtml += `<br><span class="sub-label">${row[nameColumn2]}</span>`;
+
+        function showAddressesOnMap(cols) {
+          const token = ++runToken;
+          clearMarkers();
+          el.showMapBtn.disabled = true;
+
+          const bounds = new naver.maps.LatLngBounds();
+          const stats = { success: 0, fail: 0, cacheHit: 0 };
+
+          // 같은 주소를 여러 행이 공유하면 지오코딩은 한 번만 한다
+          const groups = new Map();
+          fileRows.forEach((row, index) => {
+            const raw = row[cols.address];
+            const address = cleanAddress(raw);
+            if (!address) {
+              stats.fail++;
+              return;
+            }
+            let group = groups.get(address);
+            if (!group) {
+              group = { address: address, items: [] };
+              groups.set(address, group);
+            }
+            group.items.push({ row: row, raw: raw, index: index });
+          });
+
+          const cached = [];
+          const pending = [];
+          groups.forEach((group) => {
+            if (geoCache[group.address]) cached.push(group);
+            else pending.push(group);
+          });
+
+          const totalGroups = cached.length + pending.length;
+          if (totalGroups === 0) {
+            el.showMapBtn.disabled = false;
+            finishMapping(stats, bounds);
+            return;
+          }
+
+          let doneGroups = 0;
+          let lastStatusAt = 0;
+
+          function reportProgress(force) {
+            const now = Date.now();
+            if (!force && now - lastStatusAt < 150) return;
+            lastStatusAt = now;
+            showStatus(
+              `주소를 지도에 표시하는 중... (${doneGroups}/${totalGroups}개 주소)`,
+              "info"
+            );
+          }
+
+          reportProgress(true);
+
+          // 1단계: 캐시에 있는 주소는 API 없이, 덩어리로 나눠 그린다
+          function placeCachedChunk(start) {
+            if (token !== runToken) return;
+            const end = Math.min(start + PLACE_CHUNK, cached.length);
+            for (let i = start; i < end; i++) {
+              const group = cached[i];
+              const coords = geoCache[group.address];
+              stats.cacheHit++;
+              group.items.forEach((item) => {
+                placeMarker(coords.x, coords.y, item, cols, bounds);
+                stats.success++;
+              });
+              doneGroups++;
+            }
+            reportProgress(end >= cached.length);
+
+            if (end < cached.length) {
+              setTimeout(() => placeCachedChunk(end), 0);
+            } else {
+              runGeocodeQueue();
+            }
+          }
+
+          // 2단계: 나머지는 동시 요청 수를 제한해 순차적으로 처리
+          function runGeocodeQueue() {
+            if (token !== runToken) return;
+            if (!pending.length) return done();
+
+            let nextIndex = 0;
+            let finished = 0;
+            const workers = Math.min(GEOCODE_CONCURRENCY, pending.length);
+
+            function pump() {
+              if (token !== runToken) return;
+              if (nextIndex >= pending.length) return;
+
+              const group = pending[nextIndex++];
+              naver.maps.Service.geocode(
+                { query: group.address },
+                function (status, response) {
+                  if (token !== runToken) return;
+
+                  const ok =
+                    status !== naver.maps.Service.Status.ERROR &&
+                    response &&
+                    response.v2 &&
+                    response.v2.meta.totalCount > 0;
+
+                  if (ok) {
+                    const result = response.v2.addresses[0];
+                    const coords = { x: result.x, y: result.y };
+                    cacheSet(group.address, coords);
+                    group.items.forEach((item) => {
+                      placeMarker(coords.x, coords.y, item, cols, bounds);
+                      stats.success++;
+                    });
+                  } else {
+                    if (status === naver.maps.Service.Status.ERROR) {
+                      console.error("Geocoding API 오류:", group.address);
+                    } else {
+                      console.warn("주소 검색 결과 없음:", group.address);
+                    }
+                    stats.fail += group.items.length;
+                  }
+
+                  doneGroups++;
+                  finished++;
+                  reportProgress(false);
+
+                  if (finished === pending.length) done();
+                  else pump();
+                }
+              );
+            }
+
+            for (let i = 0; i < workers; i++) pump();
+          }
+
+          function done() {
+            if (token !== runToken) return;
+            el.showMapBtn.disabled = false;
+            flushCache();
+            finishMapping(stats, bounds);
+          }
+
+          placeCachedChunk(0);
         }
-        if (hasName3) {
-          labelHtml += `<br><span class="sub-label-2">${row[nameColumn3]}</span>`;
-        }
 
-        if (hasName1 || hasName2 || hasName3) {
-          const currentZoom = map.getZoom();
-          const showLabel = currentZoom >= LABEL_ZOOM_THRESHOLD;
+        function placeMarker(x, y, item, cols, bounds) {
+          const position = new naver.maps.LatLng(parseFloat(y), parseFloat(x));
 
-          const labelContent = buildLabelContent(labelHtml, showLabel ? "block" : "none");
-
-          labelOverlay = new naver.maps.Marker({
+          const marker = new naver.maps.Marker({
             position: position,
             map: map,
             icon: {
-              content: labelContent,
-              anchor: new naver.maps.Point(0, 2),
+              content: MARKER_HTML,
+              anchor: new naver.maps.Point(MARKER_ANCHOR, MARKER_ANCHOR),
             },
-            clickable: false,
           });
-        }
 
-        markers.push({
-          marker: marker,
-          labelOverlay: labelOverlay,
-          labelHtml: (hasName1 || hasName2 || hasName3) ? labelHtml : undefined
-        });
-        bounds.extend(position);
-      }
+          const row = item.row;
+          const name1 = cols.name1 ? row[cols.name1] : "";
+          const name2 = cols.name2 ? row[cols.name2] : "";
+          const name3 = cols.name3 ? row[cols.name3] : "";
 
-      function finishMapping(successCount, failCount, cacheHitCount, bounds) {
-        if (successCount > 0) {
-          map.fitBounds(bounds);
-          let msg = `${successCount}개 주소 표시 완료!`;
-          if (cacheHitCount > 0) {
-            msg += ` (캐시 ${cacheHitCount}건 활용)`;
-          }
-          if (failCount > 0) {
-            msg += ` (${failCount}개 실패)`;
-          }
-          showStatus(msg, "success");
-        } else {
-          showStatus("주소를 찾을 수 없습니다. 주소 형식을 확인해주세요.", "error");
-        }
-      }
+          // InfoWindow 는 인스턴스 하나를 돌려 쓴다 (행 수만큼 만들지 않는다)
+          let info = `<div style="padding:10px;"><strong>${esc(
+            name1 || "위치 " + (item.index + 1)
+          )}</strong>`;
+          if (name2) info += `<br><span style="color:#666;">${esc(name2)}</span>`;
+          if (name3) info += `<br><span style="color:#888;">${esc(name3)}</span>`;
+          info += `<br>${esc(item.raw)}</div>`;
 
-      function showStatus(message, type) {
-        const status = document.getElementById("status");
-        status.textContent = message;
-        status.className = "status " + type;
-      }
-
-      window.onload = function () {
-        if (typeof naver === "undefined" || !naver.maps) {
-          showStatus("네이버 지도 API 키가 필요합니다. 아래 설정 방법을 확인하세요.", "error");
-        } else {
-          initMap();
-        }
-      };
-
-      document.getElementById("collapseBtn").addEventListener("click", function () {
-          const uploadSection = document.querySelector(".upload-section");
-          const isCollapsed = uploadSection.classList.toggle("collapsed");
-          this.textContent = isCollapsed ? "▼ 펼치기" : "▲ 접기";
-        });
-
-      document.getElementById("fullscreenBtn").addEventListener("click", function () {
-          const mapContainer = document.getElementById("mapContainer");
-          const isFullscreen = mapContainer.classList.toggle("fullscreen");
-          this.textContent = isFullscreen ? "✕ 닫기" : "🔍 전체화면";
-
-          setTimeout(function () {
-            if (map) {
-              naver.maps.Event.trigger(map, "resize");
+          naver.maps.Event.addListener(marker, "click", function () {
+            if (activeMarker === marker && infoWindow.getMap()) {
+              infoWindow.close();
+              activeMarker = null;
+              return;
             }
-          }, 100);
+            infoWindow.setContent(info);
+            infoWindow.open(map, marker);
+            activeMarker = marker;
+          });
+
+          // 라벨 내용은 생성 시 한 번만 만든다. 크기·표시 여부는 CSS 가 담당.
+          let labelOverlay = null;
+          let labelHtml = "";
+          if (name1) labelHtml += esc(name1);
+          if (name2) labelHtml += `<br><span class="sub-label">${esc(name2)}</span>`;
+          if (name3) labelHtml += `<br><span class="sub-label-2">${esc(name3)}</span>`;
+
+          if (labelHtml) {
+            labelOverlay = new naver.maps.Marker({
+              position: position,
+              map: map,
+              clickable: false,
+              icon: {
+                content: `<div class="marker-label">${labelHtml}</div>`,
+                anchor: new naver.maps.Point(0, 0),
+              },
+            });
+          }
+
+          markers.push({ marker: marker, labelOverlay: labelOverlay });
+          bounds.extend(position);
+        }
+
+        function finishMapping(stats, bounds) {
+          if (stats.success === 0) {
+            showStatus("주소를 찾을 수 없습니다. 주소 형식을 확인해주세요.", "error");
+            return;
+          }
+
+          map.fitBounds(bounds, { top: 40, right: 40, bottom: 40, left: 40 });
+          // 결과가 한 곳뿐이면 fitBounds 가 최대 배율까지 당긴다 — 상한을 둔다
+          setTimeout(function () {
+            if (map.getZoom() > MAX_FIT_ZOOM) map.setZoom(MAX_FIT_ZOOM);
+          }, 0);
+
+          let msg = `${stats.success}개 주소 표시 완료!`;
+          if (stats.cacheHit > 0) msg += ` (캐시 ${stats.cacheHit}건 활용)`;
+          if (stats.fail > 0) msg += ` (${stats.fail}개 실패)`;
+          showStatus(msg, "success");
+        }
+
+        /* =======================================================
+           접기 / 전체화면
+           ======================================================= */
+        el.collapseBtn.addEventListener("click", function () {
+          const collapsed = el.uploadSection.classList.toggle("collapsed");
+          this.textContent = collapsed ? "▼ 펼치기" : "▲ 접기";
         });
+
+        function setFullscreen(on) {
+          el.mapContainer.classList.toggle("fullscreen", on);
+          document.body.classList.toggle("no-scroll", on);
+          el.fullscreenBtn.textContent = on ? "✕ 닫기" : "🔍 전체화면";
+          setTimeout(function () {
+            if (map) naver.maps.Event.trigger(map, "resize");
+          }, 100);
+        }
+
+        el.fullscreenBtn.addEventListener("click", function () {
+          setFullscreen(!el.mapContainer.classList.contains("fullscreen"));
+        });
+
+        document.addEventListener("keydown", function (e) {
+          if (
+            e.key === "Escape" &&
+            el.mapContainer.classList.contains("fullscreen")
+          ) {
+            setFullscreen(false);
+          }
+        });
+
+        /* =======================================================
+           시작
+           ======================================================= */
+        window.addEventListener("load", function () {
+          if (typeof naver === "undefined" || !naver.maps) {
+            showStatus(
+              "네이버 지도 API를 불러오지 못했습니다. 인터넷 연결과 API 키를 확인해주세요.",
+              "error"
+            );
+            return;
+          }
+          initMap();
+        });
+      })();
     </script>
   </body>
 </html>
