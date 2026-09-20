@@ -151,13 +151,8 @@
         transition: background 0.2s;
       }
 
-      .btn-route:hover:not(:disabled) {
+      .btn-route:hover {
         background: var(--naver-green-dark);
-      }
-
-      .btn-route:disabled {
-        background: #b5b5b5;
-        cursor: progress;
       }
 
       .select-group label {
@@ -856,37 +851,27 @@
         const ROUTE_MODE = "car"; // car | public | walk | bicycle
         const APP_NAME = location.hostname || "excel-naver-map"; // nmap 스킴 필수 항목
         const APP_FALLBACK_MS = 1500; // 앱이 안 열릴 때 웹 지도로 넘어가기까지
-        const GEO_TIMEOUT = 7000; // 위치 권한 응답을 기다리는 시간
-        const GEO_MAX_AGE = 5 * 60 * 1000; // 이 시간 안의 위치는 재사용
         const IS_MOBILE = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
+        // 출발지는 넘기지 않는다. 비워 보내면 네이버가 알아서 내 위치로 잡아준다.
         // 네이버 웹 지도의 길찾기 주소 형식. 공식 문서에 명시된 게 아니라
         // 지도 사이트가 쓰는 주소라, 바뀌면 이 함수만 고치면 된다.
-        function buildWebRouteUrl(origin, dest) {
-          const start = origin
-            ? `${origin.lng},${origin.lat},${encodeURIComponent("내 위치")},,`
-            : "-";
+        function buildWebRouteUrl(dest) {
           const goal = `${dest.lng},${dest.lat},${encodeURIComponent(dest.name)},,`;
-          return `https://map.naver.com/p/directions/${start}/${goal}/-/${ROUTE_MODE}`;
+          return `https://map.naver.com/p/directions/-/${goal}/-/${ROUTE_MODE}`;
         }
 
         // 네이버 지도 앱 스킴 (NCP 공식 문서 형식, appname 은 필수)
-        function buildAppRouteUrl(origin, dest) {
-          const params = [];
-          if (origin) {
-            params.push(
-              `slat=${origin.lat}`,
-              `slng=${origin.lng}`,
-              `sname=${encodeURIComponent("내 위치")}`
-            );
-          }
-          params.push(
-            `dlat=${dest.lat}`,
-            `dlng=${dest.lng}`,
-            `dname=${encodeURIComponent(dest.name)}`,
-            `appname=${encodeURIComponent(APP_NAME)}`
+        function buildAppRouteUrl(dest) {
+          return (
+            `nmap://route/${ROUTE_MODE}?` +
+            [
+              `dlat=${dest.lat}`,
+              `dlng=${dest.lng}`,
+              `dname=${encodeURIComponent(dest.name)}`,
+              `appname=${encodeURIComponent(APP_NAME)}`,
+            ].join("&")
           );
-          return `nmap://route/${ROUTE_MODE}?` + params.join("&");
         }
 
         /* =======================================================
@@ -924,8 +909,6 @@
         let activeMarker = null;
         let markers = []; // { marker, labelOverlay }
         let runToken = 0; // 실행 중 재실행 시 이전 작업 무효화
-        let cachedOrigin = null; // 최근에 받아온 내 위치 { lat, lng, at }
-        let geoDenied = false; // 위치 권한을 거절하면 다시 묻지 않는다
 
         /* =======================================================
            유틸
@@ -1610,15 +1593,11 @@
           btn.className = "btn-route";
           btn.textContent = ROUTE_BTN_LABEL;
           btn.addEventListener("click", function () {
-            if (btn.disabled) return;
-            openDirections(
-              {
-                lat: btn.dataset.lat,
-                lng: btn.dataset.lng,
-                name: btn.dataset.name,
-              },
-              btn
-            );
+            openDirections({
+              lat: btn.dataset.lat,
+              lng: btn.dataset.lng,
+              name: btn.dataset.name,
+            });
           });
 
           infoEl.append(title, sub, sub2, addr, btn);
@@ -1641,97 +1620,37 @@
           infoParts.btn.dataset.lat = info.lat;
           infoParts.btn.dataset.lng = info.lng;
           infoParts.btn.dataset.name = info.destName;
-          infoParts.btn.disabled = false;
-          infoParts.btn.textContent = ROUTE_BTN_LABEL;
 
           infoWindow.setContent(infoEl);
           infoWindow.open(map, marker);
         }
 
-        function openDirections(dest, btn) {
-          // 팝업 차단을 피하려면 클릭 제스처 안에서 창을 먼저 열어 둬야 한다.
-          // 위치를 받아온 뒤에 열면 브라우저가 막는다.
-          const tab = window.open("", "_blank");
+        // 클릭과 동시에 바로 연다. 기다릴 게 없으니 팝업 차단에도 걸리지 않는다.
+        function openDirections(dest) {
+          const webUrl = buildWebRouteUrl(dest);
 
-          const label = btn ? btn.textContent : "";
-          if (btn && !hasFreshOrigin()) {
-            btn.disabled = true;
-            btn.textContent = "내 위치 확인 중...";
+          if (!IS_MOBILE) {
+            if (!window.open(webUrl, "_blank", "noopener")) {
+              window.location.href = webUrl; // 팝업이 막힌 경우
+            }
+            return;
           }
 
-          resolveOrigin(function (origin) {
-            if (btn) {
-              btn.disabled = false;
-              btn.textContent = label;
-            }
-
-            const webUrl = buildWebRouteUrl(origin, dest);
-
-            if (!tab || tab.closed) {
-              window.location.href = webUrl; // 팝업이 막혔으면 현재 탭에서
-              return;
-            }
-
-            if (!IS_MOBILE) {
-              tab.location.href = webUrl;
-              return;
-            }
-
-            // 모바일: 앱을 먼저 시도하고, 안 열리면 웹 지도로 넘긴다
-            tab.location.href = buildAppRouteUrl(origin, dest);
-            setTimeout(function () {
-              if (document.visibilityState === "hidden") return; // 앱이 열린 경우
-              try {
-                if (!tab.closed) tab.location.href = webUrl;
-              } catch (err) {
-                /* 다른 출처로 바뀐 탭은 건드릴 수 없다 */
-              }
-            }, APP_FALLBACK_MS);
-          });
-        }
-
-        function hasFreshOrigin() {
-          return Boolean(
-            cachedOrigin && Date.now() - cachedOrigin.at < GEO_MAX_AGE
-          );
-        }
-
-        // 출발지(내 위치)를 구한다. 못 구하면 null — 그러면 네이버가 알아서 잡는다.
-        function resolveOrigin(callback) {
-          if (hasFreshOrigin()) return callback(cachedOrigin);
-          if (geoDenied || !navigator.geolocation) return callback(null);
-
-          let settled = false;
-          function finish(origin) {
-            if (settled) return;
-            settled = true;
-            callback(origin);
+          // 모바일: 앱을 먼저 시도하고, 안 열리면 웹 지도로 넘긴다
+          const tab = window.open(buildAppRouteUrl(dest), "_blank");
+          if (!tab) {
+            window.location.href = webUrl;
+            return;
           }
 
-          // 권한 창을 열어두고 응답이 없는 경우까지 대비한 보호 타이머
-          const timer = setTimeout(() => finish(null), GEO_TIMEOUT + 500);
-
-          navigator.geolocation.getCurrentPosition(
-            function (pos) {
-              clearTimeout(timer);
-              cachedOrigin = {
-                lat: pos.coords.latitude,
-                lng: pos.coords.longitude,
-                at: Date.now(),
-              };
-              finish(cachedOrigin);
-            },
-            function (err) {
-              clearTimeout(timer);
-              if (err && err.code === 1) geoDenied = true; // 거절은 기억
-              finish(null);
-            },
-            {
-              enableHighAccuracy: false,
-              timeout: GEO_TIMEOUT,
-              maximumAge: GEO_MAX_AGE,
+          setTimeout(function () {
+            if (document.visibilityState === "hidden") return; // 앱이 열린 경우
+            try {
+              if (!tab.closed) tab.location.href = webUrl;
+            } catch (err) {
+              /* 다른 출처로 바뀐 탭은 건드릴 수 없다 */
             }
-          );
+          }, APP_FALLBACK_MS);
         }
 
         /* =======================================================
