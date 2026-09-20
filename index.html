@@ -111,6 +111,46 @@
         display: none;
       }
 
+      /* 마커 클릭 시 뜨는 정보창 */
+      .info-window {
+        padding: 10px;
+        min-width: 150px;
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      .info-window .info-sub {
+        color: #666;
+      }
+
+      .info-window .info-sub2 {
+        color: #888;
+      }
+
+      .btn-route {
+        display: block;
+        width: 100%;
+        margin-top: 10px;
+        padding: 8px 10px;
+        background: var(--naver-green);
+        color: #fff;
+        border: none;
+        border-radius: 4px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+
+      .btn-route:hover:not(:disabled) {
+        background: var(--naver-green-dark);
+      }
+
+      .btn-route:disabled {
+        background: #b5b5b5;
+        cursor: progress;
+      }
+
       .select-group label {
         display: block;
         margin-bottom: 5px;
@@ -647,6 +687,7 @@
           <p>3. 주소가 있는 열을 선택하세요</p>
           <p>4. 지도에 표시 버튼을 클릭하세요</p>
           <p>5. 지도를 확대하면 마커 옆에 이름이 표시됩니다</p>
+          <p>6. 마커를 누르면 네이버 지도 길찾기로 바로 넘어갑니다</p>
         </div>
 
         <div class="file-input-wrapper">
@@ -799,6 +840,46 @@
         const MARKER_HTML = '<div class="map-marker"><i></i></div>';
         const LABEL_SEPARATOR = "·"; // 라벨 둘째 줄에서 이름 2 와 3 을 가르는 문자
 
+        /* ---- 길찾기 ----
+           지도 JS API 에는 경로 기능이 없고, 경로를 주는 Directions REST API 는
+           CORS 가 막혀 브라우저에서 직접 못 부른다(중계 서버가 필요).
+           그래서 네이버 지도 앱/웹으로 넘겨서 길찾기를 맡긴다. */
+        const ROUTE_MODE = "car"; // car | public | walk | bicycle
+        const APP_NAME = location.hostname || "excel-naver-map"; // nmap 스킴 필수 항목
+        const APP_FALLBACK_MS = 1500; // 앱이 안 열릴 때 웹 지도로 넘어가기까지
+        const GEO_TIMEOUT = 7000; // 위치 권한 응답을 기다리는 시간
+        const GEO_MAX_AGE = 5 * 60 * 1000; // 이 시간 안의 위치는 재사용
+        const IS_MOBILE = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+        // 네이버 웹 지도의 길찾기 주소 형식. 공식 문서에 명시된 게 아니라
+        // 지도 사이트가 쓰는 주소라, 바뀌면 이 함수만 고치면 된다.
+        function buildWebRouteUrl(origin, dest) {
+          const start = origin
+            ? `${origin.lng},${origin.lat},${encodeURIComponent("내 위치")},,`
+            : "-";
+          const goal = `${dest.lng},${dest.lat},${encodeURIComponent(dest.name)},,`;
+          return `https://map.naver.com/p/directions/${start}/${goal}/-/${ROUTE_MODE}`;
+        }
+
+        // 네이버 지도 앱 스킴 (NCP 공식 문서 형식, appname 은 필수)
+        function buildAppRouteUrl(origin, dest) {
+          const params = [];
+          if (origin) {
+            params.push(
+              `slat=${origin.lat}`,
+              `slng=${origin.lng}`,
+              `sname=${encodeURIComponent("내 위치")}`
+            );
+          }
+          params.push(
+            `dlat=${dest.lat}`,
+            `dlng=${dest.lng}`,
+            `dname=${encodeURIComponent(dest.name)}`,
+            `appname=${encodeURIComponent(APP_NAME)}`
+          );
+          return `nmap://route/${ROUTE_MODE}?` + params.join("&");
+        }
+
         /* =======================================================
            DOM 참조 (한 번만 조회)
            ======================================================= */
@@ -832,6 +913,8 @@
         let activeMarker = null;
         let markers = []; // { marker, labelOverlay }
         let runToken = 0; // 실행 중 재실행 시 이전 작업 무효화
+        let cachedOrigin = null; // 최근에 받아온 내 위치 { lat, lng, at }
+        let geoDenied = false; // 위치 권한을 거절하면 다시 묻지 않는다
 
         /* =======================================================
            유틸
@@ -1416,13 +1499,18 @@
           const name2 = cols.name2 ? row[cols.name2] : "";
           const name3 = cols.name3 ? row[cols.name3] : "";
 
-          // InfoWindow 는 인스턴스 하나를 돌려 쓴다 (행 수만큼 만들지 않는다)
-          let info = `<div style="padding:10px;"><strong>${esc(
-            name1 || "위치 " + (item.index + 1)
-          )}</strong>`;
-          if (name2) info += `<br><span style="color:#666;">${esc(name2)}</span>`;
-          if (name3) info += `<br><span style="color:#888;">${esc(name3)}</span>`;
-          info += `<br>${esc(item.raw)}</div>`;
+          // InfoWindow 는 인스턴스 하나를 돌려 쓴다 (행 수만큼 만들지 않는다).
+          // 목적지 좌표는 버튼의 data 속성에 실어 두고 클릭은 위임으로 받는다.
+          const title = name1 || "위치 " + (item.index + 1);
+          let info = `<div class="info-window"><strong>${esc(title)}</strong>`;
+          if (name2) info += `<br><span class="info-sub">${esc(name2)}</span>`;
+          if (name3) info += `<br><span class="info-sub2">${esc(name3)}</span>`;
+          info += `<br>${esc(item.raw)}`;
+          info +=
+            `<button type="button" class="btn-route"` +
+            ` data-lat="${esc(y)}" data-lng="${esc(x)}"` +
+            ` data-name="${esc(name1 || cleanAddress(item.raw) || title)}">` +
+            `🧭 길찾기</button></div>`;
 
           naver.maps.Event.addListener(marker, "click", function () {
             if (activeMarker === marker && infoWindow.getMap()) {
@@ -1480,6 +1568,109 @@
           if (stats.cacheHit > 0) msg += ` (캐시 ${stats.cacheHit}건 활용)`;
           if (stats.fail > 0) msg += ` (${stats.fail}개 실패)`;
           showStatus(msg, "success");
+        }
+
+        /* =======================================================
+           길찾기 버튼
+           ======================================================= */
+        document.addEventListener("click", function (e) {
+          const btn =
+            e.target && e.target.closest ? e.target.closest(".btn-route") : null;
+          if (!btn || btn.disabled) return;
+          openDirections(
+            {
+              lat: btn.dataset.lat,
+              lng: btn.dataset.lng,
+              name: btn.dataset.name,
+            },
+            btn
+          );
+        });
+
+        function openDirections(dest, btn) {
+          // 팝업 차단을 피하려면 클릭 제스처 안에서 창을 먼저 열어 둬야 한다.
+          // 위치를 받아온 뒤에 열면 브라우저가 막는다.
+          const tab = window.open("", "_blank");
+
+          const label = btn ? btn.textContent : "";
+          if (btn && !hasFreshOrigin()) {
+            btn.disabled = true;
+            btn.textContent = "내 위치 확인 중...";
+          }
+
+          resolveOrigin(function (origin) {
+            if (btn) {
+              btn.disabled = false;
+              btn.textContent = label;
+            }
+
+            const webUrl = buildWebRouteUrl(origin, dest);
+
+            if (!tab || tab.closed) {
+              window.location.href = webUrl; // 팝업이 막혔으면 현재 탭에서
+              return;
+            }
+
+            if (!IS_MOBILE) {
+              tab.location.href = webUrl;
+              return;
+            }
+
+            // 모바일: 앱을 먼저 시도하고, 안 열리면 웹 지도로 넘긴다
+            tab.location.href = buildAppRouteUrl(origin, dest);
+            setTimeout(function () {
+              if (document.visibilityState === "hidden") return; // 앱이 열린 경우
+              try {
+                if (!tab.closed) tab.location.href = webUrl;
+              } catch (err) {
+                /* 다른 출처로 바뀐 탭은 건드릴 수 없다 */
+              }
+            }, APP_FALLBACK_MS);
+          });
+        }
+
+        function hasFreshOrigin() {
+          return Boolean(
+            cachedOrigin && Date.now() - cachedOrigin.at < GEO_MAX_AGE
+          );
+        }
+
+        // 출발지(내 위치)를 구한다. 못 구하면 null — 그러면 네이버가 알아서 잡는다.
+        function resolveOrigin(callback) {
+          if (hasFreshOrigin()) return callback(cachedOrigin);
+          if (geoDenied || !navigator.geolocation) return callback(null);
+
+          let settled = false;
+          function finish(origin) {
+            if (settled) return;
+            settled = true;
+            callback(origin);
+          }
+
+          // 권한 창을 열어두고 응답이 없는 경우까지 대비한 보호 타이머
+          const timer = setTimeout(() => finish(null), GEO_TIMEOUT + 500);
+
+          navigator.geolocation.getCurrentPosition(
+            function (pos) {
+              clearTimeout(timer);
+              cachedOrigin = {
+                lat: pos.coords.latitude,
+                lng: pos.coords.longitude,
+                at: Date.now(),
+              };
+              finish(cachedOrigin);
+            },
+            function (err) {
+              clearTimeout(timer);
+              if (err && err.code === 1) geoDenied = true; // 거절은 기억
+              finish(null);
+            },
+            {
+              enableHighAccuracy: false,
+              timeout: GEO_TIMEOUT,
+              maximumAge: GEO_MAX_AGE,
+            }
+          );
         }
 
         /* =======================================================
