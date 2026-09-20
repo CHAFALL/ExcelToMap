@@ -119,12 +119,21 @@
         line-height: 1.5;
       }
 
+      .info-window .info-title {
+        font-weight: 700;
+        color: #222;
+      }
+
       .info-window .info-sub {
         color: #666;
       }
 
       .info-window .info-sub2 {
         color: #888;
+      }
+
+      .info-window .info-addr {
+        color: #333;
       }
 
       .btn-route {
@@ -910,6 +919,8 @@
         let lastSelection = { address: "", name1: "", name2: "", name3: "" };
         let map = null;
         let infoWindow = null;
+        let infoEl = null; // 정보창 내용 DOM (하나를 돌려 쓴다)
+        let infoParts = null; // 그 안의 조각들에 대한 참조
         let activeMarker = null;
         let markers = []; // { marker, labelOverlay }
         let runToken = 0; // 실행 중 재실행 시 이전 작업 무효화
@@ -1020,7 +1031,7 @@
             zoom: 12,
           });
 
-          infoWindow = new naver.maps.InfoWindow({ content: "" });
+          infoWindow = new naver.maps.InfoWindow({ content: buildInfoElement() });
 
           syncLabelVisibility(map.getZoom());
           naver.maps.Event.addListener(map, "zoom_changed", syncLabelVisibility);
@@ -1499,18 +1510,18 @@
           const name2 = cols.name2 ? row[cols.name2] : "";
           const name3 = cols.name3 ? row[cols.name3] : "";
 
-          // InfoWindow 는 인스턴스 하나를 돌려 쓴다 (행 수만큼 만들지 않는다).
-          // 목적지 좌표는 버튼의 data 속성에 실어 두고 클릭은 위임으로 받는다.
+          // InfoWindow 는 인스턴스 하나, 내용 DOM 도 하나를 돌려 쓴다.
+          // 마커마다 만드는 건 이 평범한 객체뿐이다.
           const title = name1 || "위치 " + (item.index + 1);
-          let info = `<div class="info-window"><strong>${esc(title)}</strong>`;
-          if (name2) info += `<br><span class="info-sub">${esc(name2)}</span>`;
-          if (name3) info += `<br><span class="info-sub2">${esc(name3)}</span>`;
-          info += `<br>${esc(item.raw)}`;
-          info +=
-            `<button type="button" class="btn-route"` +
-            ` data-lat="${esc(y)}" data-lng="${esc(x)}"` +
-            ` data-name="${esc(name1 || cleanAddress(item.raw) || title)}">` +
-            `🧭 길찾기</button></div>`;
+          const info = {
+            title: title,
+            name2: name2,
+            name3: name3,
+            address: item.raw,
+            lat: y,
+            lng: x,
+            destName: name1 || cleanAddress(item.raw) || title,
+          };
 
           naver.maps.Event.addListener(marker, "click", function () {
             if (activeMarker === marker && infoWindow.getMap()) {
@@ -1518,8 +1529,7 @@
               activeMarker = null;
               return;
             }
-            infoWindow.setContent(info);
-            infoWindow.open(map, marker);
+            showInfoWindow(info, marker);
             activeMarker = marker;
           });
 
@@ -1571,21 +1581,72 @@
         }
 
         /* =======================================================
-           길찾기 버튼
+           정보창과 길찾기 버튼
+
+           주의: 네이버 InfoWindow 는 내부 클릭의 버블링을 막는다.
+           그래서 document 에 위임해 두면 버튼 클릭이 영영 안 잡힌다.
+           내용을 문자열이 아니라 DOM 으로 만들어 버튼에 직접 건다.
            ======================================================= */
-        document.addEventListener("click", function (e) {
-          const btn =
-            e.target && e.target.closest ? e.target.closest(".btn-route") : null;
-          if (!btn || btn.disabled) return;
-          openDirections(
-            {
-              lat: btn.dataset.lat,
-              lng: btn.dataset.lng,
-              name: btn.dataset.name,
-            },
-            btn
-          );
-        });
+        const ROUTE_BTN_LABEL = "🧭 길찾기";
+
+        function buildInfoElement() {
+          infoEl = document.createElement("div");
+          infoEl.className = "info-window";
+
+          const title = document.createElement("div");
+          title.className = "info-title";
+
+          const sub = document.createElement("div");
+          sub.className = "info-sub";
+
+          const sub2 = document.createElement("div");
+          sub2.className = "info-sub2";
+
+          const addr = document.createElement("div");
+          addr.className = "info-addr";
+
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "btn-route";
+          btn.textContent = ROUTE_BTN_LABEL;
+          btn.addEventListener("click", function () {
+            if (btn.disabled) return;
+            openDirections(
+              {
+                lat: btn.dataset.lat,
+                lng: btn.dataset.lng,
+                name: btn.dataset.name,
+              },
+              btn
+            );
+          });
+
+          infoEl.append(title, sub, sub2, addr, btn);
+          infoParts = { title, sub, sub2, addr, btn };
+          return infoEl;
+        }
+
+        // 값은 textContent 로만 넣는다 — 이스케이프가 따로 필요 없다
+        function showInfoWindow(info, marker) {
+          infoParts.title.textContent = info.title;
+
+          infoParts.sub.textContent = info.name2 || "";
+          infoParts.sub.classList.toggle("is-hidden", !info.name2);
+
+          infoParts.sub2.textContent = info.name3 || "";
+          infoParts.sub2.classList.toggle("is-hidden", !info.name3);
+
+          infoParts.addr.textContent = info.address;
+
+          infoParts.btn.dataset.lat = info.lat;
+          infoParts.btn.dataset.lng = info.lng;
+          infoParts.btn.dataset.name = info.destName;
+          infoParts.btn.disabled = false;
+          infoParts.btn.textContent = ROUTE_BTN_LABEL;
+
+          infoWindow.setContent(infoEl);
+          infoWindow.open(map, marker);
+        }
 
         function openDirections(dest, btn) {
           // 팝업 차단을 피하려면 클릭 제스처 안에서 창을 먼저 열어 둬야 한다.
